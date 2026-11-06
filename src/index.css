@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Narayana Textiles tokens: deep maroon + temple gold on warm ivory */
+:root {
+  --bg: 250 246 240; --surface: 255 255 255; --surface-2: 245 239 230; --border: 226 216 202;
+  --text: 38 26 22; --muted: 110 96 88; --accent: 128 27 58; --accent-strong: 100 18 44; --on-accent: 255 255 255;
+  --gold: 176 125 30; --success: 21 120 74; --warning: 168 98 0; --danger: 190 32 40;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: 24 18 17; --surface: 34 27 25; --surface-2: 44 35 32; --border: 70 58 53;
+    --text: 244 236 228; --muted: 184 170 160; --accent: 214 92 128; --accent-strong: 232 120 152; --on-accent: 30 10 16;
+    --gold: 222 176 86; --success: 74 196 134; --warning: 236 170 70; --danger: 244 108 108; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: 24 18 17; --surface: 34 27 25; --surface-2: 44 35 32; --border: 70 58 53;
+  --text: 244 236 228; --muted: 184 170 160; --accent: 214 92 128; --accent-strong: 232 120 152; --on-accent: 30 10 16;
+  --gold: 222 176 86; --success: 74 196 134; --warning: 236 170 70; --danger: 244 108 108; color-scheme: dark;
+}
+html, body { background: rgb(var(--bg)); color: rgb(var(--text)); }
+body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+input[type=number]::-webkit-inner-spin-button { opacity: .4; }
+
+/* Printing: only the .print-area is printed */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: absolute; left: 0; top: 0; color: #000 !important; background: #fff !important; }
+  .no-print { display: none !important; }
+  @page { margin: 4mm; }
+}
+.receipt { width: 76mm; font-family: ui-monospace, 'Courier New', monospace; font-size: 11px; color: #000; background: #fff; }

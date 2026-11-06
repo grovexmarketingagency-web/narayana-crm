@@ -1,0 +1,64 @@
+feature,area,priority,original,clone,notes
+Billing screen with scan or search,billing,must,yes,yes,
+Barcode gun / scanner input (keyboard wedge),billing,must,yes,yes,
+Metre quantity for cloth on same bill as pieces,billing,must,yes,yes,
+Multiple bill tabs and hold bill,billing,must,yes,yes,
+Split payment cash/UPI/card,billing,must,yes,yes,
+Print GST bill (80mm thermal),billing,must,yes,yes,
+GST slabs 5%/18% by price after discount with CGST/SGST and HSN,gst,must,yes,yes,
+Products with sizes and colours each with own stock,inventory,must,yes,yes,
+Low stock alerts,inventory,must,yes,yes,
+QR sticker printing (50x25 and A4),inventory,must,yes,yes,
+Supplier purchases with cost price,inventory,must,yes,yes,
+Stock count by scanning with corrections,inventory,must,yes,yes,
+Customers by mobile with purchase history,customers,must,yes,yes,
+Loyalty points earn and redeem,customers,must,yes,yes,
+Credit sales with limits and part payments,credit,must,yes,yes,
+Alteration slips with due dates and ready list,alterations,must,yes,yes,
+Returns and exchanges with credit notes,returns,must,yes,yes,
+Gift vouchers redeemable in parts,returns,must,yes,yes,
+Offers: percent / buy X get Y / flat off above amount,offers,must,yes,yes,
+Coupon codes at billing,offers,must,yes,yes,
+Salesman codes with points or commission per piece,salesmen,must,yes,yes,
+Dashboard: today sales and profit and best sellers,reports,must,yes,yes,
+Staff logins with roles and PIN,staff,must,yes,yes,
+Owner PIN approval for big discounts,staff,must,yes,yes,
+Reports: daily sales best sellers sizes busy hours,reports,should,yes,yes,
+Dead stock report 30/60/90/180 days,reports,should,yes,yes,
+GST summary GSTR-1 style,reports,should,yes,yes,
+Expenses and profit,reports,should,yes,yes,
+Export to Excel/CSV,reports,should,yes,yes,
+Change history (audit log),staff,should,yes,yes,
+Accountant read-only login,staff,should,yes,yes,
+Offline billing,billing,should,yes,yes,works offline; syncs to central server when back
+Bill on WhatsApp,billing,should,yes,yes,wa.me link with bill text
+Excel/CSV product import,inventory,should,yes,yes,
+Suppliers book,inventory,should,yes,yes,
+Backup / restore,settings,should,yes,yes,JSON file
+Phone camera scanning,billing,could,yes,no,scanner guns work (keyboard input); camera next
+Tamil and other languages,settings,could,yes,no,language setting exists; Tamil strings next step
+Tally export file,reports,could,yes,no,CSV export only
+GST calculator / margin calculator tools,tools,could,yes,partial,margin shown in product editor
+Clearance offer from dead stock,reports,could,yes,yes,
+Customer birthday list,customers,could,yes,yes,
+Two-step owner login,staff,could,yes,no,needs real backend auth
+TizoPOS branding and copy,brand,skip,yes,skip,replaced by Narayana Textiles brand
+Hardware bundles and installers,hardware,skip,yes,skip,business service not software
+Native Windows/Android apps,platform,skip,yes,skip,browser app first; PWA later
+Daily off-site backup service,ops,should,yes,yes,server scheduled backups; copy folder to cloud drive
+SKU code generator (category-product-size-colour),product,must,sheet,yes,
+Automatic barcode generation (Code 128),product,must,sheet,yes,
+Brand and supplier on product; opening stock,product,must,sheet,yes,
+Single / bulk barcode label printing; labels after purchase,barcode,must,sheet,yes,
+Purchase payment status and supplier balances,purchase,must,sheet,yes,
+Income entries,accounts,must,sheet,yes,
+Cash book / day book (cash and bank),accounts,must,sheet,yes,
+Customer and supplier ledgers,accounts,must,sheet,yes,
+Excel export: stock / sales / purchases / parties / accounts,backup,must,sheet,yes,.xlsx
+PDF export: sales / purchases / accounts / bills,backup,must,sheet,yes,
+Full database backup and restore,backup,must,sheet,yes,
+Scheduled automatic backup,backup,must,sheet,yes,browser copies + folder; server writes dated files
+Central database for multiple counters,database,must,sheet,yes,server/index.mjs (Node + SQLite) with offline queue
+Editable role-based permissions,admin,must,sheet,yes,
+"Stock report (category, size, colour)",reports,must,sheet,yes,
+Thermal 58/80 mm setting,printer,must,sheet,yes,

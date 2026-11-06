@@ -1,0 +1,9 @@
+server/data/
+server/dist/
+node_modules/
+dist*/
+.env
+*.log
+*.tsbuildinfo
+narayana-textiles-crm.html
+preview.html

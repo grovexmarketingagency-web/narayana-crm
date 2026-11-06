@@ -1,0 +1,48 @@
+# Runs on every pull request and every push to main. A red check means: do not merge, do not deploy.
+name: checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongo:
+        image: mongo:7
+        ports: ["27017:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TZ: Asia/Kolkata
+      MONGODB_URI: mongodb://localhost:27017
+      MONGODB_URI_RS: mongodb://localhost:27018/?replicaSet=rs0&directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci
+      - name: Security audit of what runs in the shop
+        run: npm audit --omit=dev --audit-level=high
+      - name: Start a MongoDB replica set (the same kind as Atlas, with transactions)
+        run: |
+          docker run -d --name mongo-rs -p 27018:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec mongo-rs mongosh --quiet --eval "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }" && break; sleep 2; done
+          for i in $(seq 1 30); do docker exec mongo-rs mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true && break; sleep 2; done
+      - run: npm run typecheck
+      - name: Rules, server, security and MongoDB tests
+        run: npm test
+      - run: npm run build
+      - run: npm run build:single
+      - run: npx playwright install --with-deps chromium
+      - name: Screens (single-file app, one computer)
+        run: npm run test:e2e
+      - name: Two counters on the central database, including an offline counter
+        run: npm run test:sync

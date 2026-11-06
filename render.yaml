@@ -1,0 +1,36 @@
+# Render Blueprint: one Node service serves the app and its central database API from the same address
+# (same address = the login cookie stays SameSite=Strict and no cross-site requests are needed).
+# Render > New > Blueprint > pick this repo. Secrets are entered in the dashboard, never stored here.
+# Render's disk is wiped on every deploy, so the cloud version must use MongoDB Atlas (MONGODB_URI).
+services:
+  - type: web
+    name: narayana-crm
+    runtime: node
+    plan: starter            # free instances sleep after 15 minutes; counters keep billing offline but sync slowly after wake-up
+    region: singapore
+    numInstances: 1          # must stay 1: the server keeps the working copy in memory and applies changes one at a time
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Kolkata
+      - key: TRUST_PROXY
+        value: "1"
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB
+        value: narayana
+      - key: OWNER_PIN          # only used the very first time, to create the owner's login; change it in Settings afterwards
+        sync: false
+      - key: SHOP_NAME
+        value: Narayana Textiles
+      - key: BACKUP_HOURS
+        value: "24"
+      - key: KEEP_BACKUPS
+        value: "30"

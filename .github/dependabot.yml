@@ -1,0 +1,18 @@
+# Opens a pull request when a dependency has a security fix or an update.
+# The checks run on each one; merge only when they are green.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch: { update-types: [minor, patch] }
+    # Major upgrades (React, Vite, MongoDB driver, zod, jsPDF...) need a person to test billing and printing,
+    # so they are skipped here. Security fixes still come through.
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
