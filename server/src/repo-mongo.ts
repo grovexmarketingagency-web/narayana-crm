@@ -24,7 +24,7 @@ export class MongoRepo implements Repo {
   private db!: Db
   private txOk = true
   constructor(uri: string, private dbName: string) {
-    this.client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000, retryWrites: true, appName: 'narayana-crm' })
+    this.client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000, retryWrites: true, appName: 'narayana-crm', ignoreUndefined: true })
   }
   private get c() {
     return {
