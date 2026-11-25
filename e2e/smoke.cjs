@@ -14,12 +14,11 @@ const url = 'file://' + path.resolve(__dirname, '../dist-single/index.html')
   await p.waitForSelector('text=Today at the counter'); await shot('S02-dashboard'); ok.push('owner login')
   // F01 billing: scan barcode, metre item, salesman card, customer, pay
   await p.goto(url + '#/billing'); const scan = p.getByLabel('Scan or search item')
-  await scan.fill('NT100107'); await scan.press('Enter')       // Kanchipuram silk (12500 -> 18%)
+  await scan.fill('NT100107'); await scan.press('Enter')       // Kanchipuram silk, 12500
   await scan.fill('SM02'); await scan.press('Enter')
   await scan.fill('Shirting'); await p.locator('[role=listbox] button').first().click()
   await p.getByRole('button', { name: '2.5 m' }).click(); await p.getByRole('button', { name: /Add 2.5 m/ }).click()
   const rows = await p.locator('tbody tr').count(); check(rows === 2, `cart has 2 lines (got ${rows})`)
-  check(await p.getByText('18%').first().isVisible(), 'silk saree over threshold gets 18%')
   check(await p.locator('select').first().inputValue() === 'm2', 'salesman card scan sets salesman')
   await p.getByRole('button', { name: /Add customer by mobile/ }).click(); await p.getByPlaceholder('10-digit mobile').fill('9000011111')
   await p.getByPlaceholder('Name', { exact: true }).fill('Test Customer'); await p.getByRole('button', { name: 'Save' }).click()
@@ -30,7 +29,7 @@ const url = 'file://' + path.resolve(__dirname, '../dist-single/index.html')
   await p.getByRole('tab').first().click()
   await p.getByRole('button', { name: /^Pay$/ }).click(); await p.getByRole('button', { name: 'All UPI' }).click()
   await p.getByRole('button', { name: /Save & print bill/ }).click()
-  await p.waitForSelector('text=TAX INVOICE'); await shot('S04-bill'); ok.push('checkout -> bill print view')
+  await p.waitForSelector('.print-area .receipt'); await shot('S04-bill'); ok.push('checkout -> bill print view')
   check(await p.getByText('Salesman: SM02').isVisible(), 'salesman on bill')
   // credit sale over limit blocked + allowed under limit
   await p.goto(url + '#/billing'); await p.getByLabel('Scan or search item').fill('NT100114'); await p.getByLabel('Scan or search item').press('Enter')
@@ -54,9 +53,9 @@ const url = 'file://' + path.resolve(__dirname, '../dist-single/index.html')
   check(await p.locator('img[alt^="Barcode"]').count() > 10, 'barcode labels render')
   // product entry: new product gets SKU + barcode automatically
   await p.goto(url + '#/products'); await p.getByRole('button', { name: 'Add product' }).click()
-  await p.getByPlaceholder('e.g. Soft Silk Saree').fill('Test Cotton Saree'); await p.locator('[role=dialog] input[type=number]').first().fill('999')
+  await p.getByPlaceholder('e.g. Soft Silk Saree').fill('Test Cotton Saree'); await p.locator('[role=dialog]').getByLabel('Selling price ₹').fill('999')
   await p.getByRole('button', { name: 'Generate SKU & barcode now' }).click()
-  const sku = await p.locator('[role=dialog] tbody input').nth(2).inputValue(); const bc = await p.locator('[role=dialog] tbody input').nth(3).inputValue()
+  const sku = await p.locator('[role=dialog]').getByLabel('SKU code').inputValue(); const bc = await p.locator('[role=dialog]').getByLabel('Barcode', { exact: true }).inputValue()
   check(/^[A-Z]{3}-\d{4}/.test(sku) && bc.slice(0, 3) === sku.slice(0, 3) && /^[A-Z]{2,3}\d{6}$/.test(bc), `SKU ${sku} and barcode ${bc} generated`)
   await p.getByRole('button', { name: 'Save product' }).click(); await shot('products')
   // purchase on credit -> supplier ledger
@@ -71,7 +70,7 @@ const url = 'file://' + path.resolve(__dirname, '../dist-single/index.html')
   await p.goto(url + '#/settings'); await p.getByRole('tab', { name: 'Role permissions' }).click(); await shot('settings-permissions')
   await p.getByLabel('cashier can open Customers').uncheck()
   // reports tabs
-  await p.goto(url + '#/reports'); for (const t of ['Stock', 'GST summary', 'Dead stock', 'Busy hours', 'Profit', 'Best sellers']) { await p.getByRole('tab', { name: t, exact: true }).click(); await shot('reports-' + t.replace(/ /g, '-').toLowerCase()) }
+  await p.goto(url + '#/reports'); for (const t of ['Daily sales', 'Stock', 'Dead stock', 'Busy hours', 'Profit', 'Best sellers']) { await p.getByRole('tab', { name: t, exact: true }).click(); await shot('reports-' + t.replace(/ /g, '-').toLowerCase()) }
   // stock count
   await p.goto(url + '#/stock-count'); await p.getByRole('button', { name: /Start counting/ }).click(); await p.getByLabel(/Scan each sticker/).fill('NT100107'); await p.getByLabel(/Scan each sticker/).press('Enter'); await shot('stock-count-open')
   await p.getByRole('button', { name: 'Cancel count' }).click()
