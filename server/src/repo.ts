@@ -1,5 +1,6 @@
-/* Where the central database keeps its data. Two implementations share this interface:
-   MongoDB (MONGODB_URI set, for Atlas or a local MongoDB) and SQLite (a single file on the shop PC, no install).
+/* Where the central database keeps its data. Three implementations share this interface:
+   PostgreSQL (DATABASE_URL set, e.g. Supabase, for Vercel), MongoDB (MONGODB_URI set, for Atlas or a local MongoDB)
+   and SQLite (a single file on the shop PC, no install).
    Every write is one atomic commit, so a power cut can never leave half a bill saved. */
 import type { Change } from '../../src/lib/sync'
 
@@ -11,7 +12,9 @@ export interface BackupRow { name: string; at: string; v: number; size: number; 
 export interface Commit { head: Omit<Head, 'secret' | 'serverId'>; records: Change[]; ops: OpRow[] }
 
 export interface Repo {
-  readonly kind: 'mongodb' | 'sqlite'
+  readonly kind: 'mongodb' | 'sqlite' | 'postgres'
+  /** true when several server copies (serverless instances) can use this database at the same time */
+  readonly shared: boolean
   /** creates tables / indexes; safe to run on every start */
   init(): Promise<void>
   /** null when the database has never been set up */
@@ -19,6 +22,14 @@ export interface Repo {
   /** writes the very first head (with a new secret) */
   createHead(h: Head): Promise<void>
   records(): Promise<Change[]>
+  /** records saved after version `v` (used by a server copy to catch up with what another copy saved) */
+  recordsSince(v: number): Promise<Change[]>
+  /** runs `fn` while holding the database-wide write lock, so only one server copy changes data at a time (a plain call when the server is the only user) */
+  locked<T>(fn: () => Promise<T>): Promise<T>
+  /** login-attempt counters shared by every server copy (only used when `shared`): counts a hit and returns how many hits the key has in the window */
+  rateHit?(key: string, windowMs: number, now: number): Promise<number>
+  rateCount?(key: string, windowMs: number, now: number): Promise<number>
+  rateClear?(key: string): Promise<void>
   /** saves changed records, their operations and the new head together, or nothing at all */
   commit(c: Commit): Promise<void>
   /** replaces every record (restore from backup) */

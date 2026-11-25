@@ -51,3 +51,28 @@ export class Limiter {
   full(key: string, now = Date.now()): boolean { return (this.hits.get(key) || []).filter(x => now - x < this.windowMs).length >= this.max }
   clear(key: string) { this.hits.delete(key) }
 }
+
+/* Two-step login for owners: 6-digit codes from an authenticator app (Google Authenticator, Microsoft Authenticator…), RFC 6238. */
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+function b32encode(b: Buffer): string { let bits = '', out = ''; for (const x of b) bits += x.toString(2).padStart(8, '0'); for (let i = 0; i + 5 <= bits.length; i += 5) out += B32[parseInt(bits.slice(i, i + 5), 2)]; return out }
+export function newTotpSecret(): string { return b32encode(crypto.randomBytes(20)) }
+/** the secret offered while setting up two-step login, derived from the server secret so no copy of the server has to remember it.
+    It changes every 10 minutes; `bucket` counts those. */
+export function pendingTotpSecret(serverSecret: string, staffId: string, bucket: number): string {
+  return b32encode(crypto.createHmac('sha256', serverSecret).update(`2fa-setup|${staffId}|${bucket}`).digest().subarray(0, 20))
+}
+function b32decode(s: string): Buffer { let bits = ''; for (const c of s.replace(/=+$/, '').toUpperCase()) { const v = B32.indexOf(c); if (v < 0) continue; bits += v.toString(2).padStart(5, '0') } const out: number[] = []; for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2)); return Buffer.from(out) }
+export function totpAt(secret: string, step: number): string {
+  const msg = Buffer.alloc(8); msg.writeBigUInt64BE(BigInt(step))
+  const h = crypto.createHmac('sha1', b32decode(secret)).update(msg).digest()
+  const o = h[h.length - 1] & 15
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1e6).padStart(6, '0')
+}
+/** the time step the code belongs to (one step either side allowed for clock drift), or null. Steps at or before `after` are refused so a code works once. */
+export function checkTotp(secret: string, code: string, after = 0, now = Date.now()): number | null {
+  if (!/^\d{6}$/.test(code)) return null
+  const step = Math.floor(now / 30e3)
+  for (const s of [step - 1, step, step + 1]) if (s > after && crypto.timingSafeEqual(Buffer.from(totpAt(secret, s)), Buffer.from(code))) return s
+  return null
+}
+export const totpUri = (secret: string, account: string, issuer = 'Narayana CRM') => `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret}&issuer=${encodeURIComponent(issuer)}&algorithm=SHA1&digits=6&period=30`

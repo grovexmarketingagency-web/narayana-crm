@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download, Upload, FileSpreadsheet, FileText, FolderOpen, ShieldCheck, Server, History } from 'lucide-react'
 import { useStore, api, serverApi } from '../lib/store'
+import { tallyXml } from '../lib/tally'
 import { dayKey, localToday, dt } from '../lib/format'
 import { exportsFor } from '../lib/exports'
 import { blockedDownload } from '../lib/exporter'
@@ -12,6 +13,7 @@ function Row({ title, sub, tags, children }: { title: string; sub: string; tags:
     <div className="min-w-0"><div className="flex items-center gap-2 font-medium">{title}{tags.map(t => <Badge key={t} tone={t === 'Excel' ? 'success' : 'accent'}>{t}</Badge>)}</div><div className="text-sm text-muted">{sub}</div></div>
     <div className="flex flex-wrap gap-2">{children}</div></div>
 }
+function saveFile(name: string, text: string, type: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
 function saveText(name: string, text: string) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
 
 export default function Backup() {
@@ -20,12 +22,13 @@ export default function Backup() {
   const [from, setFrom] = useState(dayKey(m0.toISOString())); const [to, setTo] = useState(localToday())
   const [snaps, setSnaps] = useState<Snap[]>([]); const [last, setLast] = useState<string>(); const [folder, setFolder] = useState<string>(); const [folderOk, setFolderOk] = useState(false)
   const [srv, setSrv] = useState<{ file: string; size: number; at: string }[]>([])
+  const [health, setHealth] = useState<Awaited<ReturnType<typeof serverApi.health>> | null>(null)
   const [restore, setRestore] = useState<{ label: string; text: string } | null>(null)
   const file = useRef<HTMLInputElement>(null)
   const refresh = async () => {
     setSnaps(await listSnaps()); setLast(await lastBackup())
     const h = await getFolder(); setFolder(h?.name); setFolderOk(h ? await folderReady(h) : false)
-    if (sync.mode === 'server') { try { setSrv(await serverApi.listBackups()) } catch { /* */ } }
+    if (sync.mode === 'server') { try { setSrv(await serverApi.listBackups()); setHealth(await serverApi.health()) } catch { /* */ } }
   }
   useEffect(() => { void refresh() }, [sync.mode])
   const ex = (fn: () => void) => { if (!blockedDownload(toast.err)) { try { fn() } catch (e) { toast.err(String((e as Error).message)) } } }
@@ -36,15 +39,25 @@ export default function Backup() {
     <Card className="divide-y divide-border">
       <Row title="Products & inventory" tags={['Excel']} sub={`${db.variants.length} items with SKU, barcode, size, colour, prices and stock`}>
         <Button variant="primary" onClick={() => ex(() => exportsFor.stockExcel(db))}><Download size={16} />Download stock Excel</Button></Row>
-      <Row title="Sales reports" tags={['Excel', 'PDF']} sub="Every bill with GST split, plus item-wise sales">
+      <Row title="Sales reports" tags={['Excel', 'PDF']} sub="Every bill, plus item-wise sales">
         <Button onClick={() => ex(() => exportsFor.salesExcel(db, from, to))}><FileSpreadsheet size={16} />Excel</Button><Button onClick={() => ex(() => exportsFor.salesPDF(db, from, to))}><FileText size={16} />PDF</Button></Row>
       <Row title="Purchase reports" tags={['Excel', 'PDF']} sub="Supplier purchases, amounts paid and balances">
         <Button onClick={() => ex(() => exportsFor.purchaseExcel(db, from, to))}><FileSpreadsheet size={16} />Excel</Button><Button onClick={() => ex(() => exportsFor.purchasePDF(db, from, to))}><FileText size={16} />PDF</Button></Row>
       <Row title="Supplier & customer data" tags={['Excel']} sub={`${db.customers.length} customers and ${db.suppliers.length} suppliers with balances`}>
         <Button onClick={() => ex(() => exportsFor.partiesExcel(db))}><FileSpreadsheet size={16} />Excel</Button></Row>
+      <Row title="Tally (for the accountant)" tags={['Tally']} sub="Sales, returns, purchases, payments, expenses and credit collected as a Tally import file, with the ledgers it needs">
+        <Button onClick={() => ex(() => { const t = tallyXml(db, from, to); saveFile(`tally-${from}-to-${to}.xml`, t.xml, 'application/xml'); toast.ok(`${t.counts.sales} bills, ${t.counts.returns} returns, ${t.counts.purchases} purchases exported`) })}><FileText size={16} />Tally XML</Button></Row>
       <Row title="Accounts & expenses" tags={['Excel', 'PDF']} sub="Cash book, income and expenses">
         <Button onClick={() => ex(() => exportsFor.accountsExcel(db, from, to))}><FileSpreadsheet size={16} />Excel</Button><Button onClick={() => ex(() => exportsFor.accountsPDF(db, from, to))}><FileText size={16} />PDF</Button></Row>
     </Card>
+
+    {health && <Card className="mt-4" title="Where your data is kept"><div className="space-y-2 p-5 text-sm">
+      {(health.backupLate || health.backupCopy === 'failing') && <p className="rounded-md bg-danger/10 p-3 font-medium text-danger">{health.backupLate ? 'The automatic backup is late. Check that the server PC is on, then press "Back up now" below.' : 'The second backup copy could not be written. Check that the pen drive or backup folder is connected.'}</p>}
+      <p><b>Main copy:</b> {health.storage === 'mongo' ? 'MongoDB Atlas in the cloud (it keeps its own copies too).' : 'the database file on the shop server PC.'}</p>
+      <p><b>Each counter:</b> keeps its own working copy, so billing continues if the network or server goes down and catches up later.</p>
+      <p><b>Automatic backups:</b> {health.lastBackupAt ? `last one ${new Date(health.lastBackupAt).toLocaleString('en-IN')}` : 'none yet'}, stored inside the database.</p>
+      <p><b>Second copy outside the database:</b> {health.backupCopy === 'off' ? 'not set up. Ask your developer to set BACKUP_COPY_DIR to a pen drive or Google Drive folder, or download a full copy below every week.' : health.backupCopy === 'ok' ? 'on, every backup is also saved as a file.' : 'failing, see above.'}</p>
+    </div></Card>}
 
     <Card className="mt-4" title={<span className="flex items-center gap-2"><ShieldCheck size={16} className="text-success" />Full database backup</span>}>
       <div className="p-5">

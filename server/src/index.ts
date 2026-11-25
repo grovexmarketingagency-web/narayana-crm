@@ -7,36 +7,25 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { loadConfig } from './config'
-import { SqliteRepo } from './repo-sqlite'
-import { MongoRepo } from './repo-mongo'
-import { Engine, checkBackup } from './engine'
+import { openEngine } from './open'
+import { openRepo } from './repo-open'
 import { createApp } from './app'
+import { maintenance } from './maintenance'
 import type { Repo } from './repo'
-import { buildSeed, blankDB } from '../../src/lib/seed'
 
 async function main() {
   const cfg = loadConfig()
-  const repo: Repo = cfg.mongoUri ? new MongoRepo(cfg.mongoUri, cfg.mongoDb) : new SqliteRepo(path.join(cfg.dataDir, 'narayana.sqlite'))
-  const engine = await Engine.open(repo, () => {
-    const old = repo instanceof SqliteRepo ? repo.legacyData() : null
-    if (old) { console.log('New database: importing data saved by the previous server version'); return checkBackup(old) }
-    if (cfg.seedDemo) { console.log('New database: loading demo data (demo PINs 1234 / 2222 / 1111 / 0000)'); return buildSeed() }
-    if (cfg.ownerPin) { console.log(`New database: shop "${cfg.shopName}" with owner "${cfg.ownerName}"`); return blankDB(cfg.shopName, cfg.ownerName, cfg.ownerPin) }
-    throw new Error('This is a new database. Set OWNER_PIN (the owner\'s first PIN) or SEED_DEMO=1 and start again.')
-  }, cfg.keepBackups)
+  const repo: Repo = await openRepo(cfg)
+  const engine = await openEngine(cfg, repo)
+  if (cfg.backupCopyDir) console.log('Every backup is also copied to', cfg.backupCopyDir)
 
   const server = http.createServer(createApp({ cfg, repo, engine }))
   server.requestTimeout = 120e3; server.headersTimeout = 20e3; server.keepAliveTimeout = 10e3
 
   // scheduled backups and clean-up
   const tick = async () => {
-    try {
-      await repo.purge(Date.now())
-      if (cfg.backupHours > 0) {
-        const last = (await repo.listBackups())[0]
-        if (!last || Date.now() - Date.parse(last.at) >= cfg.backupHours * 3600e3) console.log('scheduled backup', (await engine.backup('scheduled')).name)
-      }
-    } catch (e) { console.error('scheduled backup failed', e) }
+    try { const r = await maintenance(repo, engine, cfg); if (r.backup) console.log('scheduled backup', r.backup) }
+    catch (e) { console.error('scheduled backup failed', e) }
   }
   const timer = setInterval(tick, 15 * 60e3); void tick()
 

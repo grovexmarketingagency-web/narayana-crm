@@ -2,9 +2,8 @@ import type { DB, Draft, BillLine, Offer, Shop, GstType } from './types'
 import { r2, localToday } from './format'
 
 export function gstRateFor(shop: Shop, type: GstType, unitNet: number) {
-  if (type === 'garment') return unitNet > shop.garmentThreshold ? shop.garmentHigh : shop.garmentLow
-  if (type === 'fabric') return shop.fabricRate
-  return shop.otherRate
+  void shop; void type; void unitNet
+  return 0 // this shop does not charge GST: prices are final
 }
 
 interface Raw { variantId: string; productName: string; variantLabel: string; hsn: string; unit: 'pcs' | 'm'; category: string; gstType: GstType; qty: number; mrp: number; cost: number; gross: number; lineDisc: number }

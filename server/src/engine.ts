@@ -1,13 +1,15 @@
 /* The central database's working copy. All changes go through here one at a time (no two counters can
    interleave half-finished changes), and each batch is saved to storage before anyone sees it. */
 import zlib from 'node:zlib'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import { produce, setAutoFreeze } from 'immer'
 import { z } from 'zod'
 import type { DB, Staff } from '../../src/lib/types'
 import { applyOp, denied, OpError } from '../../src/lib/ops'
 import { migrate } from '../../src/lib/migrate'
 import { shopS } from '../../src/lib/schemas'
-import { diff, fromChanges, LISTS, toChanges, type Change } from '../../src/lib/sync'
+import { applyChanges, diff, fromChanges, LISTS, toChanges, type Change, type Seqs } from '../../src/lib/sync'
 import { argsS } from '../../src/lib/schemas'
 import { approvalToken, hashPin, newId, newSecret, readApproval } from './auth'
 import type { BackupRow, Head, OpRow, Repo } from './repo'
@@ -24,12 +26,14 @@ const envelope = z.object({
   at: z.string().max(40),
 })
 const DAY = 86400e3
+/** about 2.5 MB of records per answer */
+const PAGE_BYTES = 2.5e6
 
 /** no PIN is ever stored in plain text: new PINs are replaced by their hash */
 function securePins(d: DB) { for (const s of d.staff) if (s.pin) { s.pinHash = hashPin(s.pin); delete s.pin } }
 /** what counters may see of a record (no PIN hashes) */
 export function forClient(c: Change): Change {
-  if (c.c === 'staff' && c.d) { const { pin: _p, pinHash: _h, ...rest } = c.d as Staff; return { ...c, d: rest } }
+  if (c.c === 'staff' && c.d) { const { pin: _p, pinHash: _h, totpSecret, totpLastStep: _t, ...rest } = c.d as Staff; return { ...c, d: { ...rest, twoStep: !!totpSecret } } }
   return c
 }
 
@@ -38,20 +42,26 @@ export class Engine {
   head!: Head
   private info = new Map<string, Info>()
   private chain: Promise<unknown> = Promise.resolve()
+  /** folder outside the database that also receives every backup as a file (BACKUP_COPY_DIR) */
+  copyDir?: string
+  /** the last problem writing that copy, shown in the health check until a copy works again */
+  copyError: string | null = null
   constructor(private repo: Repo, private keepBackups = 30) {}
 
   static async open(repo: Repo, initial: () => DB, keepBackups = 30): Promise<Engine> {
     const e = new Engine(repo, keepBackups)
     await repo.init()
-    let head = await repo.head()
-    const records = head ? await repo.records() : []
-    if (!head || records.length === 0) {
-      const db = initial(); migrate(db); securePins(db)
-      const changes = toChanges(db, 1)
-      if (!head) { head = { version: 0, seq: changes.length + 1, resetAt: 1, secret: newSecret(), serverId: newId() }; await repo.createHead(head) }
-      await repo.replaceAll({ head: { version: 1, seq: changes.length + 1, resetAt: 1 }, records: changes, ops: [] })
-      e.load({ ...head, version: 1, seq: changes.length + 1, resetAt: 1 }, changes)
-    } else e.load(head, records)
+    await repo.locked(async () => {     // under the lock, so two server copies starting together cannot both create the first data
+      let head = await repo.head()
+      const records = head ? await repo.records() : []
+      if (!head || records.length === 0) {
+        const db = initial(); migrate(db); securePins(db)
+        const changes = toChanges(db, 1)
+        if (!head) { head = { version: 0, seq: changes.length + 1, resetAt: 1, secret: newSecret(), serverId: newId() }; await repo.createHead(head) }
+        await repo.replaceAll({ head: { version: 1, seq: changes.length + 1, resetAt: 1 }, records: changes, ops: [] })
+        e.load({ ...head, version: 1, seq: changes.length + 1, resetAt: 1 }, changes)
+      } else e.load(head, records)
+    })
     await e.exclusive(async () => {   // bring old data up to the current shape, and hash any plain PINs left from a restore
       const next = produce(e.state, d => { migrate(d); securePins(d) })
       await e.commitNext(next, [])
@@ -67,16 +77,47 @@ export class Engine {
     this.head = { ...head, version: v, seq: s }
   }
 
-  /** runs one change batch at a time */
+  /** runs one change batch at a time. With a shared database (several server copies) it also holds the database lock and starts from the newest saved data. */
   exclusive<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.chain.then(fn, fn)
+    const job = () => this.repo.locked(async () => { await this.refresh(); return fn() })
+    const run = this.chain.then(job, job)
     this.chain = run.catch(() => undefined)
     return run
   }
 
+  /** brings this copy up to date with what other server copies saved (does nothing when this server is the only one using the database) */
+  sync(): Promise<void> {
+    if (!this.repo.shared) return Promise.resolve()
+    const run = this.chain.then(() => this.refresh(), () => this.refresh())
+    this.chain = run.catch(() => undefined)
+    return run
+  }
+
+  private async refresh() {
+    if (!this.repo.shared) return
+    const h = await this.repo.head(); if (!h) return
+    if (h.resetAt !== this.head.resetAt || h.serverId !== this.head.serverId) { this.load(h, await this.repo.records()); return }   // data was restored: start over
+    if (h.version <= this.head.version) return
+    const recs = await this.repo.recordsSince(this.head.version)
+    for (const r of recs) this.info.set(r.c + '/' + r.i, r)
+    const seqs: Seqs = {}; for (const r of this.info.values()) if (r.d !== null) seqs[r.c + '/' + r.i] = r.s
+    this.state = produce(this.state, d => { applyChanges(d, seqs, recs) })
+    let v = h.version, sq = h.seq
+    for (const r of this.info.values()) { if (r.v > v) v = r.v; if (r.s >= sq) sq = r.s + 1 }
+    this.head = { ...h, version: v, seq: sq }
+  }
+
   get version() { return this.head.version }
   staff(id: string | undefined) { return this.state.staff.find(s => s.id === id) }
-  publicStaff() { return this.state.staff.filter(s => s.active).map(s => ({ id: s.id, name: s.name, role: s.role })) }
+  publicStaff() { return this.state.staff.filter(s => s.active).map(s => ({ id: s.id, name: s.name, role: s.role, twoStep: !!s.totpSecret })) }
+
+  /** changes the server-only fields of one staff member (two-step login) */
+  updateStaff(id: string, fn: (s: Staff) => void) {
+    return this.exclusive(async () => {
+      const next = produce(this.state, d => { const s = d.staff.find(x => x.id === id); if (!s) throw new OpError('Staff not found'); fn(s) })
+      await this.commitNext(next, [])
+    })
+  }
   approve(billId: string, ownerId: string) { return approvalToken(this.head.secret, billId, ownerId) }
 
   /** saves the difference between the current data and `next` (plus operation results) as one new version */
@@ -126,12 +167,27 @@ export class Engine {
     })
   }
 
-  /** records changed after `since` (or everything, when the counter is too far behind or the data was restored) */
-  changesSince(since: number) {
-    const full = !(since >= this.head.resetAt && since <= this.head.version)
-    const changes: Change[] = []
-    for (const r of this.info.values()) if (full ? r.d !== null : r.v > since) changes.push(forClient(r))
-    return { version: this.head.version, resetAt: this.head.resetAt, serverId: this.head.serverId, full, changes }
+  /** Records changed after `since` (or everything, when the counter is too far behind or the data was restored).
+      Big answers come in pages (`more` + `next`; ask again with `after=next`), because hosting such as Vercel limits one answer to 4.5 MB.
+      A full copy is page by page in key order; the counter then asks for changes since the version of the first page, which catches anything saved meanwhile. */
+  changesSince(since: number, after?: string, budget = PAGE_BYTES) {
+    const meta = { version: this.head.version, resetAt: this.head.resetAt, serverId: this.head.serverId }
+    let full = after !== undefined || !(since >= this.head.resetAt && since <= this.head.version)
+    if (!full) {
+      const changes: Change[] = []; let size = 0
+      for (const r of this.info.values()) if (r.v > since) { const c = forClient(r); size += JSON.stringify(c).length; if (size > budget) { full = true; break } changes.push(c) }
+      if (!full) return { ...meta, full: false, more: false, next: null as string | null, changes }
+    }
+    const keys: string[] = []
+    for (const [k, r] of this.info) if (r.d !== null && (after === undefined || k > after)) keys.push(k)
+    keys.sort()
+    const changes: Change[] = []; let size = 0, more = false
+    for (const k of keys) {
+      const c = forClient(this.info.get(k)!); const n = JSON.stringify(c).length
+      if (changes.length && size + n > budget) { more = true; break }
+      size += n; changes.push(c)
+    }
+    return { ...meta, full: true, more, next: more ? changes[changes.length - 1].c + '/' + changes[changes.length - 1].i : null, changes }
   }
 
   audit(staffId: string, action: string, detail: string) {
@@ -150,7 +206,19 @@ export class Engine {
     const at = new Date().toISOString()
     const row = { name: `narayana-backup-${at.slice(0, 19).replace(/[:T]/g, '-')}-v${this.version}.json`, at, v: this.version, size: json.length, reason }
     await this.repo.putBackup(row, gz, this.keepBackups)
+    if (this.copyDir) await this.copyOut(row.name, gz)
     return row
+  }
+  /** writes the backup file to the copy folder (temp file, then rename, so a half-written file never looks like a backup) and keeps the newest ones */
+  private async copyOut(name: string, gz: Buffer) {
+    try {
+      const dir = this.copyDir!; await fs.mkdir(dir, { recursive: true })
+      const file = path.join(dir, name + '.gz'), tmp = file + '.part'
+      await fs.writeFile(tmp, gz); await fs.rename(tmp, file)
+      const old = (await fs.readdir(dir)).filter(f => /^narayana-backup-.*\.json\.gz$/.test(f)).sort().reverse().slice(this.keepBackups)
+      for (const f of old) await fs.rm(path.join(dir, f), { force: true })
+      this.copyError = null
+    } catch (e) { this.copyError = (e as Error).message; console.error('backup copy to', this.copyDir, 'failed:', this.copyError) }
   }
   async readBackup(name: string) { const gz = await this.repo.getBackup(name); return gz && zlib.gunzipSync(gz).toString('utf8') }
 

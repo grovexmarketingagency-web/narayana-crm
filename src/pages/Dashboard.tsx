@@ -1,5 +1,7 @@
-import { AlertTriangle, Scissors, Wallet } from 'lucide-react'
-import { useStore } from '../lib/store'
+import { AlertTriangle, Scissors, Wallet, ShoppingCart, Search, UserPlus, PackagePlus, Barcode as BarcodeIcon, Undo2 } from 'lucide-react'
+import { useStore, currentStaff } from '../lib/store'
+import { canSee } from '../lib/access'
+import { tr } from '../lib/i18n'
 import { inr, dayKey, localToday, d } from '../lib/format'
 import { Card, Stat, Bars, Badge } from '../components/ui'
 
@@ -21,6 +23,7 @@ export default function Dashboard() {
   const pay = new Map<string, number>(); tb.forEach(b => b.payments.forEach(p => pay.set(p.mode, (pay.get(p.mode) || 0) + p.amount)))
   return <>
     <div className="mb-5"><h1 className="font-display text-2xl font-semibold">Today at the counter</h1><p className="text-sm text-muted">{d(new Date().toISOString())}</p></div>
+    <QuickActions />
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat label="Today's sales" value={inr(sales)} sub={`${tb.length} bills`} tone="accent" />
       <Stat label="Gross profit" value={inr(taxable - cost)} sub={`after cost, before ₹${exp} expenses`} tone="success" />
@@ -39,4 +42,23 @@ export default function Dashboard() {
         <ul className="divide-y divide-border">{dues.length ? dues.slice(0, 6).map(c => <li key={c.id} className="flex justify-between px-4 py-2 text-sm"><span>{c.name}</span><span className="num font-medium text-danger">{inr(c.balance)}</span></li>) : <li className="px-4 py-6 text-center text-sm text-muted">Nobody owes money</li>}</ul></Card>
     </div>
   </>
+}
+
+/* the everyday jobs as big buttons, so nobody has to hunt through the menu */
+const ACTIONS = [
+  { href: '/billing', label: 'New bill', hint: 'Scan and sell', icon: ShoppingCart, main: true },
+  { href: '/bills', label: 'Find a bill', hint: 'Reprint or share', icon: Search },
+  { href: '/returns', label: 'Return / exchange', hint: 'Give a credit note', icon: Undo2 },
+  { href: '/customers', label: 'Customers', hint: 'Add or look up', icon: UserPlus },
+  { href: '/credit', label: 'Collect dues', hint: 'Money owed', icon: Wallet },
+  { href: '/purchases', label: 'Stock in', hint: 'New purchase', icon: PackagePlus },
+  { href: '/labels', label: 'Print labels', hint: 'Section by section', icon: BarcodeIcon },
+]
+function QuickActions() {
+  const { db } = useStore(); const me = currentStaff()
+  const list = ACTIONS.filter(a => me && canSee(db, me.role, a.href))
+  if (!list.length) return null
+  return <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">{list.map(a => { const I = a.icon
+    return <a key={a.href} href={'#' + a.href} className={`flex flex-col items-start gap-2 rounded-lg border p-4 transition-colors ${a.main ? 'border-accent bg-accent text-on-accent hover:bg-accent-strong' : 'border-border bg-surface hover:border-accent/50 hover:bg-surface-2'}`}>
+      <I size={22} className={a.main ? '' : 'text-accent'} /><span><span className="block text-sm font-semibold">{tr(db.shop.language, a.label)}</span><span className={`block text-xs ${a.main ? 'opacity-85' : 'text-muted'}`}>{a.hint}</span></span></a> })}</div>
 }

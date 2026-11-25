@@ -3,13 +3,22 @@ export type GstType = 'garment' | 'fabric' | 'other'
 export type Unit = 'pcs' | 'm'
 export type PayMode = 'cash' | 'upi' | 'card' | 'credit' | 'voucher' | 'points'
 
+/** a shop section (Sarees, Kurtis…) with the short code that starts its barcodes */
+export interface Section { name: string; code: string }
 export interface Shop {
-  name: string; tagline: string; address: string; phone: string; gstin: string; stateName: string
+  name: string; tagline: string; address: string; phone: string; gstin: string; stateName: string; logo?: string
   billFooter: string; garmentThreshold: number; garmentLow: number; garmentHigh: number; fabricRate: number; otherRate: number
   pointsPer100: number; pointValue: number; lowStockDefault: number; language: 'en' | 'ta' | 'ml'
   printerWidth: '58' | '80'; labelCode: 'barcode' | 'qr'; autoBackupHours: number; openingCash: number; openingBank: number
+  sections: Section[]
 }
-export interface Staff { id: string; name: string; role: Role; pin?: string; pinHash?: string; maxDiscountPct: number; active: boolean }
+export interface Staff {
+  id: string; name: string; role: Role; pin?: string; pinHash?: string; maxDiscountPct: number; active: boolean
+  /** server only: two-step login secret and the last code step used (never sent to counters) */
+  totpSecret?: string; totpLastStep?: number
+  /** sent to counters instead of the secret */
+  twoStep?: boolean
+}
 export interface Product { id: string; name: string; category: string; hsn: string; gstType: GstType; unit: Unit; brand?: string; supplierId?: string; createdAt: string }
 export interface Variant { id: string; productId: string; size: string; colour: string; sku: string; barcode: string; mrp: number; cost: number; stock: number; lowAt: number; createdAt: string; lastSoldAt?: string }
 export interface Customer { id: string; mobile: string; name: string; points: number; creditLimit: number; balance: number; birthday?: string; city?: string; createdAt: string }

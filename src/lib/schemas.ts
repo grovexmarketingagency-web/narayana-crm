@@ -16,7 +16,7 @@ const payMode = z.enum(['cash', 'upi', 'card', 'credit', 'voucher', 'points'])
 const acct = z.enum(['cash', 'bank'])
 
 export const shopS = z.object({
-  name: name, tagline: text(), address: text(300), phone: text(40), gstin: text(20), stateName: text(60), billFooter: text(400),
+  name: name, tagline: text(), address: text(300), phone: text(40), gstin: text(20), stateName: text(60), logo: text(90000).optional(), billFooter: text(400),
   garmentThreshold: money, garmentLow: z.number().min(0).max(40), garmentHigh: z.number().min(0).max(40), fabricRate: z.number().min(0).max(40), otherRate: z.number().min(0).max(40),
   pointsPer100: z.number().min(0).max(100), pointValue: z.number().min(0).max(100), lowStockDefault: qty, language: z.enum(['en', 'ta', 'ml']),
   printerWidth: z.enum(['58', '80']), labelCode: z.enum(['barcode', 'qr']), autoBackupHours: z.number().int().min(0).max(168), openingCash: z.number().finite(), openingBank: z.number().finite(),
@@ -64,6 +64,7 @@ export const argsS = {
   paySupplier: z.object({ id, supplierId: id, amount: money.refine(n => n > 0), mode: acct, at: iso, note: text(200) }),
   saveStaff: z.object({ staff: staffS }),
   saveShop: z.object({ shop: shopS }),
+  saveSections: z.object({ sections: z.array(z.object({ name: z.string().trim().min(1).max(40), code: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,4}$/, 'Code must be 2 to 4 letters or digits'), was: text(40).optional() })).max(100) }),
   setShopPrefs: z.object({ labelCode: z.enum(['barcode', 'qr']).optional(), autoBackupHours: z.number().int().min(0).max(168).optional() }),
   savePermissions: z.object({ role: roleS, pages: z.array(z.string().regex(/^\/[a-z-]*$/)).max(40) }),
 } as const

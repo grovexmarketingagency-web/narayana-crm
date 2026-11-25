@@ -57,7 +57,7 @@ const url = 'file://' + path.resolve(__dirname, '../dist-single/index.html')
   await p.getByPlaceholder('e.g. Soft Silk Saree').fill('Test Cotton Saree'); await p.locator('[role=dialog] input[type=number]').first().fill('999')
   await p.getByRole('button', { name: 'Generate SKU & barcode now' }).click()
   const sku = await p.locator('[role=dialog] tbody input').nth(2).inputValue(); const bc = await p.locator('[role=dialog] tbody input').nth(3).inputValue()
-  check(/^[A-Z]{3}-\d{4}/.test(sku) && /^NT\d+/.test(bc), `SKU ${sku} and barcode ${bc} generated`)
+  check(/^[A-Z]{3}-\d{4}/.test(sku) && bc.slice(0, 3) === sku.slice(0, 3) && /^[A-Z]{2,3}\d{6}$/.test(bc), `SKU ${sku} and barcode ${bc} generated`)
   await p.getByRole('button', { name: 'Save product' }).click(); await shot('products')
   // purchase on credit -> supplier ledger
   await p.goto(url + '#/purchases'); await p.getByRole('button', { name: 'New purchase' }).click()
