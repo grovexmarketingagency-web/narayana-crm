@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { UserPlus, Download, Cake } from 'lucide-react'
 import { useStore, api } from '../lib/store'
 import { inr, d, dt, downloadCSV } from '../lib/format'
-import { Button, Card, Input, Table, Td, Badge, PageHeader, Field, Modal } from '../components/ui'
+import { Button, Card, Input, Table, Td, Badge, PageHeader, Field, Modal, toast } from '../components/ui'
 import type { Customer } from '../lib/types'
 
 export default function Customers() {
@@ -16,6 +16,7 @@ export default function Customers() {
   return <>
     <PageHeader title="Customers" sub={`${db.customers.length} customers · ${db.customers.reduce((s, c) => s + c.points, 0)} loyalty points outstanding`} actions={<>
       <Button onClick={() => downloadCSV('customers.csv', [['Name', 'Mobile', 'City', 'Points', 'Due', 'Bills', 'Spent'], ...db.customers.map(c => { const s = stats(c.id); return [c.name, c.mobile, c.city || '', c.points, c.balance, s.n, s.spent] })])}><Download size={16} />Export</Button>
+      <Button onClick={async () => { const nums = db.customers.map(c => '91' + c.mobile).join('\n'); try { await navigator.clipboard.writeText(nums); toast.ok(`${db.customers.length} numbers copied`) } catch { toast.err('Could not copy. Use Export instead.') } }}>Copy all numbers</Button>
       <Button variant="primary" onClick={() => setEdit({ creditLimit: 5000 })}><UserPlus size={16} />Add customer</Button></>} />
     {bdays.length > 0 && <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gold/40 bg-gold/10 px-4 py-2.5 text-sm"><Cake size={16} className="text-gold" />Birthdays this month: {bdays.map(c => <span key={c.id} className="font-medium">{c.name} ({c.birthday?.slice(8)})</span>)}</div>}
     <Card>

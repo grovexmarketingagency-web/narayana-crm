@@ -13,6 +13,7 @@ type Row = Record<string, unknown>
 
 export class SqliteRepo implements Repo {
   readonly kind = 'sqlite' as const
+  readonly shared = false
   private db: DatabaseSyncT
   constructor(file: string) {
     if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true })
@@ -42,6 +43,10 @@ export class SqliteRepo implements Repo {
   async records(): Promise<Change[]> {
     return (this.db.prepare('SELECT c, i, v, s, d FROM records').all() as Row[]).map(r => ({ c: String(r.c), i: String(r.i), v: Number(r.v), s: Number(r.s), d: r.d === null ? null : JSON.parse(String(r.d)) }))
   }
+  async recordsSince(v: number): Promise<Change[]> {
+    return (this.db.prepare('SELECT c, i, v, s, d FROM records WHERE v > ?').all(v) as Row[]).map(r => ({ c: String(r.c), i: String(r.i), v: Number(r.v), s: Number(r.s), d: r.d === null ? null : JSON.parse(String(r.d)) }))
+  }
+  locked<T>(fn: () => Promise<T>): Promise<T> { return fn() }
   private write(c: Commit) {
     const up = this.db.prepare('INSERT INTO records (k, c, i, v, s, d) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, s = excluded.s, d = excluded.d')
     for (const r of c.records) up.run(r.c + '/' + r.i, r.c, r.i, r.v, r.s, r.d === null ? null : JSON.stringify(r.d))

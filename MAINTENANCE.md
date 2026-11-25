@@ -17,13 +17,15 @@ No software can promise it will never have a problem. These steps keep the risk 
 - **No secrets in the code.** `MONGODB_URI` and `OWNER_PIN` live only in Render / the shop PC's settings; `.env` is git-ignored.
 - **Pinned versions.** Node 22 (`.nvmrc`), a lockfile, and a small built-in Excel writer instead of a large library with open
   security issues.
-- **Backups** every 24 hours inside the database (30 kept), plus one automatically before every restore.
+- **Backups** every 24 hours inside the database (30 kept), plus one automatically before every restore. With `BACKUP_COPY_DIR`
+  set, every backup is also written as a file to a second place (pen drive or Google Drive folder), so one broken disk cannot
+  lose the shop's data. `/api/health` and the Backup & export screen warn when a backup is late or that copy fails.
 
 ## What the owner needs to do
 | How often | What |
 |---|---|
 | Daily | Glance at the header on each counter: it should say **Central database · saved**. "changes waiting" means that counter is offline. |
-| Weekly | Backup & export → **Download full central copy**, and keep it in Google Drive or on a pen drive. |
+| Weekly | Open Backup & export and check there is no red warning under **Where your data is kept**. If `BACKUP_COPY_DIR` is not set, download the full central copy and keep it in Google Drive or on a pen drive. |
 | Weekly | Merge Dependabot pull requests that show green checks. Close red ones and ask a developer. |
 | When someone leaves | Settings → Staff & PINs: untick **Can log in** for them. Their sessions end at once. |
 | Every 6 months | Change the MongoDB Atlas database password, then update `MONGODB_URI` in Render. Turn on two-factor login for Atlas, GitHub and Render. |

@@ -1,6 +1,7 @@
 import type { DB, Product, Variant, Customer, Bill, Draft } from './types'
 import { computeDraft } from './calc'
 import { migrate } from './migrate'
+import { DEFAULT_LOGO } from './logo'
 
 let s = 42
 const rnd = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646 }
@@ -51,9 +52,9 @@ export function buildSeed(): DB {
 
   const db: DB = {
     version: 1,
-    shop: { name: 'Narayana Textiles', tagline: 'Silks, sarees & family wear', address: 'Shop address (edit in Settings)', phone: '+91 98765 43210',
+    shop: { name: 'Narayana Textiles', tagline: 'Silks, sarees & family wear', address: 'Puthiyakotta, Kanhangad, Kasaragod Dist, Pin 671315', phone: '9961181641, 8075715654', logo: DEFAULT_LOGO,
       gstin: '32ABCDE1234F1Z5', stateName: 'Kerala (32)', billFooter: 'Thank you for shopping with us! Exchange within 7 days with bill & tag.',
-      garmentThreshold: 2500, garmentLow: 5, garmentHigh: 18, fabricRate: 5, otherRate: 12, pointsPer100: 1, pointValue: 1, lowStockDefault: 3, language: 'en', printerWidth: '80', labelCode: 'barcode', autoBackupHours: 24, openingCash: 25000, openingBank: 150000 },
+      garmentThreshold: 2500, garmentLow: 5, garmentHigh: 18, fabricRate: 5, otherRate: 12, pointsPer100: 1, pointValue: 1, lowStockDefault: 3, language: 'en', printerWidth: '80', labelCode: 'barcode', autoBackupHours: 24, openingCash: 25000, openingBank: 150000, sections: [] },
     staff: [
       { id: 's1', name: 'Owner', role: 'owner', pin: '1234', maxDiscountPct: 100, active: true },
       { id: 's2', name: 'Ravi (Manager)', role: 'manager', pin: '2222', maxDiscountPct: 15, active: true },
@@ -143,7 +144,7 @@ export function blankDB(shopName: string, ownerName: string, ownerPin: string): 
   for (const k of ['products', 'variants', 'customers', 'salesmen', 'suppliers', 'bills', 'drafts', 'offers', 'vouchers', 'alterations', 'purchases', 'stockCounts',
     'expenses', 'creditPayments', 'returns', 'audit', 'incomes', 'supplierPayments'] as const) (db[k] as unknown[]) = []
   db.counters = {}
-  db.shop = { ...db.shop, name: shopName, phone: '', gstin: '', openingCash: 0, openingBank: 0 }
+  db.shop = { ...db.shop, name: shopName, gstin: '', openingCash: 0, openingBank: 0, sections: [] }
   db.staff = [{ id: 's1', name: ownerName, role: 'owner', pin: ownerPin, maxDiscountPct: 100, active: true }]
   return db
 }

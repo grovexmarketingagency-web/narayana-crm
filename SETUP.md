@@ -25,7 +25,10 @@ bills, purchases, accounts and suppliers are the same everywhere.
    (bookmark it). Each person logs in with their own PIN. The header shows **Central database · saved** when connected.
 4. Data is kept in `server/data/narayana.sqlite`. The server takes a backup inside the database every 24 hours (keeps 30),
    and the owner can download any of them, or a full copy, from **Backup & export**. Keep a copy off the PC as well:
-   download the full copy to Google Drive / a pen drive once a week.
+   set `BACKUP_COPY_DIR` to a Google Drive / OneDrive synced folder or a pen drive (for example
+   `set BACKUP_COPY_DIR=D:\NarayanaBackups`), and every backup is also saved there as a file. If the PC's disk dies,
+   install the server on another PC and restore the newest file from that folder. **Backup & export** shows a red
+   warning when a backup is late or the copy folder cannot be written.
 5. If a counter loses the network, or the server PC is switched off, the counter keeps billing. Each bill is saved on the
    counter first and sent when the server is back, even if the browser was closed in between. The server accepts every
    change exactly once, so a bill is never lost and never doubled.

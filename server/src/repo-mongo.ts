@@ -20,11 +20,12 @@ const noTransactions = (e: unknown) => {
 
 export class MongoRepo implements Repo {
   readonly kind = 'mongodb' as const
+  readonly shared = false
   private client: MongoClient
   private db!: Db
   private txOk = true
   constructor(uri: string, private dbName: string) {
-    this.client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000, retryWrites: true, appName: 'narayana-crm' })
+    this.client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000, retryWrites: true, appName: 'narayana-crm', ignoreUndefined: true })
   }
   private get c() {
     return {
@@ -54,6 +55,10 @@ export class MongoRepo implements Repo {
     for await (const r of this.c.records.find({}, { batchSize: 2000 })) out.push({ c: r.c, i: r.i, v: r.v, s: r.s, d: r.d })
     return out
   }
+  async recordsSince(v: number): Promise<Change[]> {
+    return (await this.c.records.find({ v: { $gt: v } }).toArray()).map(r => ({ c: r.c, i: r.i, v: r.v, s: r.s, d: r.d }))
+  }
+  locked<T>(fn: () => Promise<T>): Promise<T> { return fn() }
   private async write(c: Commit, session: ClientSession | undefined, replace: boolean) {
     const col = this.c
     if (replace) await col.records.deleteMany({}, { session })

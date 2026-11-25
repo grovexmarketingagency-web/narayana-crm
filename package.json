@@ -14,9 +14,13 @@
     "test": "vitest run",
     "test:e2e": "node e2e/smoke.cjs",
     "test:sync": "node e2e/server-sync.cjs",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "build:vercel": "tsc -b && vite build && esbuild server/src/serverless.ts --bundle --platform=node --format=esm --target=node22 --external:pg-native --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" --outfile=\"api/[...slug].mjs\"",
+    "restore:postgres": "node --no-warnings scripts/restore-postgres.mjs"
   },
   "dependencies": {
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "fflate": "^0.8.3",
     "immer": "^10.1.1",
     "jsbarcode": "^3.11.6",
@@ -24,6 +28,7 @@
     "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.70.0",
     "mongodb": "^6.10.0",
+    "pg": "^8.23.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -31,6 +36,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
+    "@types/pg": "^8.23.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

@@ -13,12 +13,11 @@ const staff = (db: DB, id: string) => db.staff.find(s => s.id === id)
 
 describe('GST', () => {
   const shop = buildSeed().shop
-  it('garments up to the threshold are 5%, above are 18%', () => {
-    expect(gstRateFor(shop, 'garment', 2500)).toBe(5)
-    expect(gstRateFor(shop, 'garment', 2501)).toBe(18)
+  it('this shop charges no GST, at any price or kind of item', () => {
+    expect(gstRateFor(shop, 'garment', 2501)).toBe(0)
+    expect(gstRateFor(shop, 'fabric', 99999)).toBe(0)
   })
-  it('fabric is 5% at any price', () => { expect(gstRateFor(shop, 'fabric', 99999)).toBe(5) })
-  it('a bill splits tax-inclusive prices into taxable value and tax', () => {
+  it('a bill has no tax: the taxable value is the total', () => {
     const db = buildSeed()
     const c = computeDraft(db, { id: 'x', label: '', lines: [{ variantId: db.variants[0].id, qty: 2, discount: 0 }], billDiscount: { type: 'pct', value: 0 }, couponCode: '', held: false, createdAt: '' })
     expect(Math.abs(c.taxable + c.tax - (c.total - c.roundOff))).toBeLessThan(0.05)

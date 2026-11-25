@@ -8,6 +8,7 @@ import { inr, inr2, dt, qtyFmt, dayKey, localToday, downloadCSV, r2 } from '../l
 import { printPage } from '../lib/format'
 import { Button, Card, Input, Select, Table, Td, Badge, PageHeader, Field , toast } from '../components/ui'
 import type { Bill, DB } from '../lib/types'
+import { tr } from '../lib/i18n'
 
 export default function Bills() {
   const { db } = useStore()
@@ -42,30 +43,28 @@ export function billText(db: DB, b: Bill) {
   const c = db.customers.find(x => x.id === b.customerId)
   return [`*${db.shop.name}*`, `Bill ${b.no} · ${dt(b.at)}`, c ? `Customer: ${c.name}` : '', '',
     ...b.lines.map(l => `${l.productName} ${l.variantLabel} x${qtyFmt(l.qty, l.unit)} = ${inr2(l.net)}`), '',
-    b.discount > 0 ? `You saved ${inr2(b.discount)}` : '', `*Total ${inr(b.total)}* (incl. GST ${inr2(b.tax)})`, c ? `Points earned: ${b.pointsEarned} · Balance: ${c.points}` : '', '', db.shop.billFooter].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n')
+    b.discount > 0 ? `You saved ${inr2(b.discount)}` : '', `*Total ${inr(b.total)}*`, c ? `Points earned: ${b.pointsEarned} · Balance: ${c.points}` : '', '', db.shop.billFooter].filter((x, i, a) => x !== '' || a[i - 1] !== '').join('\n')
 }
 
 export function Receipt({ b }: { b: Bill }) {
   const { db } = useStore()
   const c = db.customers.find(x => x.id === b.customerId); const sm = db.salesmen.find(x => x.id === b.salesmanId)
-  const byRate = new Map<number, { t: number; g: number }>(); b.lines.forEach(l => { const m = byRate.get(l.gstRate) || { t: 0, g: 0 }; m.t += l.taxable; m.g += l.tax; byRate.set(l.gstRate, m) })
+  const L = db.shop.language; const t = (w: string) => tr(L, w)
   return <div className="receipt mx-auto p-3" style={db.shop.printerWidth === '58' ? { width: '48mm', fontSize: 9 } : undefined}>
-    <div className="text-center"><div className="text-[15px] font-bold">{db.shop.name.toUpperCase()}</div><div>{db.shop.tagline}</div><div>{db.shop.address}</div><div>Ph {db.shop.phone}</div><div>GSTIN {db.shop.gstin}</div>
-      <div className="my-1 font-bold">TAX INVOICE</div></div>
-    <div className="flex justify-between"><span>Bill: {b.no}</span><span>{dt(b.at)}</span></div>
-    {c && <div>Customer: {c.name} ({c.mobile})</div>}{sm && <div>Salesman: {sm.code}</div>}
+    <div className="text-center">{db.shop.logo && <img src={db.shop.logo} alt="" className="mx-auto mb-1 h-auto w-[64mm]" />}{!db.shop.logo && <div className="text-[22px] font-bold leading-tight">{db.shop.name.toUpperCase()}</div>}<div>{db.shop.tagline}</div><div>{db.shop.address}</div><div>Ph {db.shop.phone}</div><div className="mb-1" /></div>
+    <div className="flex justify-between"><span>{t('Bill')}: {b.no}</span><span>{dt(b.at)}</span></div>
+    {c && <div>{t('Customer')}: {c.name} ({c.mobile})</div>}{sm && <div>{t('Salesman')}: {sm.code}</div>}
     <div className="my-1 border-t border-dashed border-black" />
-    <table className="w-full"><thead><tr><th className="text-left">Item</th><th className="text-right">Qty</th><th className="text-right">Rate</th><th className="text-right">Amt</th></tr></thead>
-      <tbody>{b.lines.map((l, i) => <tr key={i} className="align-top"><td>{l.productName} {l.variantLabel}<div className="text-[10px]">HSN {l.hsn} · GST {l.gstRate}%{l.discount > 0 ? ` · disc ${inr2(l.discount)}` : ''}</div></td>
-        <td className="text-right">{qtyFmt(l.qty, l.unit)}</td><td className="text-right">{l.mrp}</td><td className="text-right">{l.net.toFixed(2)}</td></tr>)}</tbody></table>
+    <table className="w-full"><thead><tr><th className="text-left">{t('Item')}</th><th className="pl-2 text-right">{t('Qty')}</th><th className="pl-2 text-right">{t('Rate')}</th><th className="pl-2 text-right">{t('Amt')}</th></tr></thead>
+      <tbody>{b.lines.map((l, i) => <tr key={i} className="align-top"><td>{l.productName} {l.variantLabel}{l.discount > 0 && <div className="text-[10px]">disc {inr2(l.discount)}</div>}</td>
+        <td className="pl-2 text-right">{qtyFmt(l.qty, l.unit)}</td><td className="pl-2 text-right">{l.mrp}</td><td className="pl-2 text-right">{l.net.toFixed(2)}</td></tr>)}</tbody></table>
     <div className="my-1 border-t border-dashed border-black" />
-    <div className="flex justify-between"><span>Gross</span><span>{b.gross.toFixed(2)}</span></div>
-    {b.discount > 0 && <div className="flex justify-between"><span>Discount{b.offerLabel ? ` (${b.offerLabel})` : ''}</span><span>-{b.discount.toFixed(2)}</span></div>}
-    {[...byRate.entries()].map(([r, m]) => <div key={r} className="flex justify-between text-[10px]"><span>GST {r}%: taxable {m.t.toFixed(2)} CGST {(m.g / 2).toFixed(2)} SGST {(m.g / 2).toFixed(2)}</span></div>)}
-    {b.roundOff !== 0 && <div className="flex justify-between"><span>Round off</span><span>{b.roundOff.toFixed(2)}</span></div>}
-    <div className="mt-1 flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>₹{b.total.toFixed(2)}</span></div>
+    <div className="flex justify-between"><span>{t('Gross')}</span><span>{b.gross.toFixed(2)}</span></div>
+    {b.discount > 0 && <div className="flex justify-between"><span>{t('Discount')}{b.offerLabel ? ` (${b.offerLabel})` : ''}</span><span>-{b.discount.toFixed(2)}</span></div>}
+    {b.roundOff !== 0 && <div className="flex justify-between"><span>{t('Round off')}</span><span>{b.roundOff.toFixed(2)}</span></div>}
+    <div className="mt-1 flex justify-between text-[14px] font-bold"><span>{t('TOTAL')}</span><span>₹{b.total.toFixed(2)}</span></div>
     {b.payments.map((p, i) => <div key={i} className="flex justify-between"><span className="uppercase">{p.mode}{p.ref ? ` ${p.ref}` : ''}</span><span>{p.amount.toFixed(2)}</span></div>)}
-    {c && <div className="mt-1">Points earned {b.pointsEarned}{b.pointsRedeemed ? `, used ${b.pointsRedeemed}` : ''}. Balance {c.points}{c.balance > 0 ? ` · Due ₹${r2(c.balance)}` : ''}</div>}
+    {c && <div className="mt-1">{t('Points earned')} {b.pointsEarned}{b.pointsRedeemed ? `, ${t('used')} ${b.pointsRedeemed}` : ''}. {t('Balance')} {c.points}{c.balance > 0 ? ` · ${t('Due')} ₹${r2(c.balance)}` : ''}</div>}
     <div className="my-1 border-t border-dashed border-black" />
     <div className="text-center">{db.shop.billFooter}</div>
   </div>

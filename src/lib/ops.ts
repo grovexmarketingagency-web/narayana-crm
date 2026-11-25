@@ -6,7 +6,7 @@ import type { DB, Draft, Role, Alteration, Customer, Staff } from './types'
 import { canSee, readOnly } from './access'
 import { argsS, type OpName, type Args } from './schemas'
 import { computeDraft } from './calc'
-import { makeSku, nextBarcode } from './codes'
+import { ensureSection, makeSku, nextBarcode } from './codes'
 import { r2 } from './format'
 
 export interface Ctx {
@@ -83,10 +83,10 @@ export const OPS: Defs = {
   saveProduct: {
     pages: ['/products'],
     run(d, { product: p, variants }) {
-      upsert(d.products, p)
+      upsert(d.products, p); ensureSection(d, p.category)
       const keep = new Set(variants.map(v => v.id))
       d.variants = d.variants.filter(v => v.productId !== p.id || keep.has(v.id))
-      variants.forEach(v0 => { const v = { ...v0, productId: p.id }; if (!v.sku) v.sku = makeSku(d, p, v); if (!v.barcode) v.barcode = nextBarcode(d)
+      variants.forEach(v0 => { const v = { ...v0, productId: p.id }; if (!v.sku) v.sku = makeSku(d, p, v); if (!v.barcode) v.barcode = nextBarcode(d, p.category)
         need(!d.variants.some(x => x.barcode === v.barcode && x.id !== v.id), `Barcode ${v.barcode} is already used by another item`); upsert(d.variants, v) })
     },
     audit: (_d, a) => ['product', `Saved product ${a.product.name}`],
@@ -101,9 +101,9 @@ export const OPS: Defs = {
     run(d, { rows }, c) {
       rows.forEach(r => {
         let p = d.products.find(x => x.name.toLowerCase() === r.name.toLowerCase())
-        if (!p) { p = { id: r.productId, name: r.name, brand: r.brand, category: r.category || 'General', hsn: r.hsn || '', gstType: r.gstType, unit: r.unit, createdAt: c.at }; d.products.push(p) }
+        if (!p) { p = { id: r.productId, name: r.name, brand: r.brand, category: r.category || 'General', hsn: r.hsn || '', gstType: r.gstType, unit: r.unit, createdAt: c.at }; d.products.push(p); ensureSection(d, p.category) }
         const vv = { size: r.size || '', colour: r.colour || '' }
-        d.variants.push({ id: r.variantId, productId: p.id, ...vv, sku: r.sku || makeSku(d, p, vv), barcode: r.barcode || nextBarcode(d), mrp: r.mrp, cost: r.cost, stock: r.stock, lowAt: d.shop.lowStockDefault, createdAt: c.at })
+        d.variants.push({ id: r.variantId, productId: p.id, ...vv, sku: r.sku || makeSku(d, p, vv), barcode: r.barcode || nextBarcode(d, p.category), mrp: r.mrp, cost: r.cost, stock: r.stock, lowAt: d.shop.lowStockDefault, createdAt: c.at })
       })
     },
     audit: (_d, a) => ['import', `Imported ${a.rows.length} rows`],
@@ -190,7 +190,28 @@ export const OPS: Defs = {
     },
     audit: (_d, a) => ['staff', `Saved staff ${a.staff.name}${a.staff.pin ? ' (PIN changed)' : ''}`],
   },
-  saveShop: { pages: ['/settings'], ownerOnly: true, run(d, a) { d.shop = a.shop }, audit: () => ['settings', 'Updated shop settings'] },
+  saveShop: { pages: ['/settings'], ownerOnly: true, run(d, a) { d.shop = { ...a.shop, sections: d.shop.sections } }, audit: () => ['settings', 'Updated shop settings'] },
+  saveSections: {
+    pages: ['/settings'], ownerOnly: true,
+    run(d, { sections }) {
+      const names = new Set<string>(), codes = new Set<string>()
+      for (const s of sections) {
+        need(!names.has(s.name.toLowerCase()), `Section "${s.name}" is listed twice`); names.add(s.name.toLowerCase())
+        need(!codes.has(s.code), `Code ${s.code} is used by two sections`); codes.add(s.code)
+      }
+      for (const s of sections) if (s.was && s.was !== s.name) {
+        d.products.forEach(p => { if (p.category === s.was) p.category = s.name })
+        d.offers.forEach(o => { if (o.category === s.was) o.category = s.name })
+      }
+      for (const old of d.shop.sections) {
+        const kept = sections.some(s => s.was === old.name || (!s.was && s.name.toLowerCase() === old.name.toLowerCase()))
+        need(kept || !d.products.some(p => p.category === old.name), `Section "${old.name}" still has items, so it cannot be removed`)
+      }
+      d.shop.sections = sections.map(({ name, code }) => ({ name, code }))
+      d.products.forEach(p => ensureSection(d, p.category))
+    },
+    audit: (_d, a) => ['settings', `Saved ${a.sections.length} sections`],
+  },
   setShopPrefs: { pages: ['/labels', '/backup'], run(d, a) { if (a.labelCode) d.shop.labelCode = a.labelCode; if (a.autoBackupHours !== undefined) d.shop.autoBackupHours = a.autoBackupHours }, audit: () => ['settings', 'Changed label / backup preference'] },
   savePermissions: { pages: ['/settings'], ownerOnly: true, run(d, a) { d.permissions[a.role as Role] = a.pages }, audit: (_d, a) => ['permissions', `Changed screens for ${a.role}`] },
 }

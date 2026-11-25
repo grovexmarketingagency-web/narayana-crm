@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { produce, setAutoFreeze } from 'immer'
 import type { DB, Draft, PayMode, Payment, Bill, Staff, Purchase, Expense, Alteration, Offer, Customer, Product, Variant, Salesman, Supplier, Income, SupplierPayment, Role, AcctMode } from './types'
-import { buildSeed } from './seed'
+import { buildSeed, blankDB } from './seed'
 import { migrate } from './migrate'
 import { computeDraft } from './calc'
 import { uid, r2 } from './format'
@@ -26,7 +26,7 @@ setAutoFreeze(false)
 
 export type SyncState = { mode: 'local' | 'server'; status: 'synced' | 'pending' | 'offline' | 'local'; pending: number; lastSync?: string; server?: string; error?: string }
 type Me = Pick<Staff, 'id' | 'name' | 'role' | 'maxDiscountPct' | 'active'>
-type PublicStaff = { id: string; name: string; role: Role }
+type PublicStaff = { id: string; name: string; role: Role; twoStep?: boolean }
 
 let mode: 'local' | 'server' = 'local'
 let ready = false
@@ -128,7 +128,14 @@ async function checkSession() {
   try { const r = await req<{ staff: Me }>('/me'); me = r.staff; scheduleDraftSave(); emit() }
   catch (e) { if (e instanceof HttpErr && e.status === 401) { me = null; scheduleDraftSave(); emit() } }
 }
-type Pull = { version: number; resetAt: number; serverId: string; full: boolean; changes: Change[] }
+type Pull = { version: number; resetAt: number; serverId: string; full: boolean; more?: boolean; next?: string | null; changes: Change[] }
+/** a full copy can come in pages (hosting limits one answer to a few MB): fetch the rest, keep the first page's version so the next sync catches anything saved meanwhile */
+async function allPages<P extends Pull>(p: P): Promise<P> {
+  if (!p.full || !p.more) return p
+  const changes = [...p.changes]; let cur: Pull = p
+  for (let n = 0; cur.more && cur.next && n < 500; n++) { cur = await req<Pull>(`/changes?since=${version}&after=${encodeURIComponent(cur.next)}`, {}, 20000); changes.push(...cur.changes) }
+  return { ...p, changes, more: false, next: null }
+}
 function takeChanges(p: Pull) {
   if (p.full || p.serverId !== serverId) { const f = fromChanges(p.changes); base = f.db; seqs = f.seqs }
   else if (p.changes.length) base = produce(base, d => { applyChanges(d, seqs, p.changes) })
@@ -143,7 +150,7 @@ export async function syncNow(): Promise<void> {
   if (mode !== 'server' || syncing || !me) return
   syncing = true
   try {
-    if (!queue.length) takeChanges(await req<Pull>('/changes?since=' + version))
+    if (!queue.length) takeChanges(await allPages(await req<Pull>('/changes?since=' + version, {}, 20000)))
     for (let round = 0; queue.length && round < 50; round++) {
       const batch = queue.slice(0, 100)
       const r = await req<Pull & { results: { id: string; ok: boolean; error?: string; retry?: boolean }[] }>('/ops', { method: 'POST', body: JSON.stringify({ ops: batch, since: version }) }, 20000)
@@ -154,7 +161,7 @@ export async function syncNow(): Promise<void> {
         if (!x.ok) { const op = batch.find(o => o.id === x.id); say(`The central database refused a change${op ? ` (${label(op)})` : ''}: ${x.error}`) }
       }
       queue = queue.filter(o => !done.has(o.id)); await saveQueue()
-      takeChanges(r); replay()
+      takeChanges(await allPages(r)); replay()
       if (!done.size) break          // the server asked us to try these again later
     }
     setSync({ status: queue.length ? 'pending' : 'synced', lastSync: new Date().toISOString(), error: undefined })
@@ -170,6 +177,11 @@ export const serverApi = {
   backupNow: async () => { try { await req('/backups', { method: 'POST', body: '{}' }); return true } catch { return false } },
   backupUrl: (file: string) => `${API}/backups/${encodeURIComponent(file)}`,
   exportUrl: () => `${API}/export`,
+  health: () => req<{ ok: boolean; storage: 'mongo' | 'sqlite'; lastBackupAt: string | null; backupLate: boolean; backupCopy: 'ok' | 'failing' | 'off' }>('/health'),
+  /* two-step login for the owner (authenticator app codes) */
+  twoStepSetup: () => req<{ secret: string; uri: string }>('/2fa/setup', { method: 'POST', body: '{}' }),
+  twoStepEnable: (code: string) => req('/2fa/enable', { method: 'POST', body: JSON.stringify({ code }) }),
+  twoStepDisable: (code: string) => req('/2fa/disable', { method: 'POST', body: JSON.stringify({ code }) }),
 }
 
 /* ---------- reading ---------- */
@@ -201,9 +213,9 @@ function setDrafts(fn: (d: Draft[]) => Draft[]) { drafts = fn(drafts); scheduleD
 
 export const api = {
   /* session */
-  async login(staffId: string, pin: string): Promise<true | string> {
+  async login(staffId: string, pin: string, code?: string): Promise<true | string> {
     if (mode === 'server') {
-      try { const r = await req<{ staff: Me }>('/login', { method: 'POST', body: JSON.stringify({ staffId, pin }) }); me = r.staff; await setMany({ 'S:me': me }); emit(); void syncNow(); return true }
+      try { const r = await req<{ staff: Me }>('/login', { method: 'POST', body: JSON.stringify({ staffId, pin, ...(code ? { code } : {}) }) }); me = r.staff; await setMany({ 'S:me': me }); emit(); void syncNow(); return true }
       catch (e) { return e instanceof HttpErr ? e.message : 'The central database is not reachable. Check the shop network.' }
     }
     const s = base.staff.find(x => x.id === staffId && x.active)
@@ -316,10 +328,11 @@ export const api = {
   addExpense(e: Omit<Expense, 'id'>) { return run('addExpense', { ...e, id: uid() }) },
   deleteExpense(id: string) { run('deleteExpense', { id }) },
   saveStaff(s: Staff) { const { pinHash: _h, ...rest } = s; return run('saveStaff', { staff: { ...rest, pin: s.pin || undefined } }) },
+  saveSections(sections: { name: string; code: string; was?: string }[]) { return run('saveSections', { sections }) },
   saveShop(s: DB['shop']) {
     // label and backup preferences can be changed by managers; everything else is owner-only
     const cur = applied.shop
-    const prefsOnly = (Object.keys(s) as (keyof DB['shop'])[]).every(k => k === 'labelCode' || k === 'autoBackupHours' || s[k] === cur[k])
+    const prefsOnly = (Object.keys(s) as (keyof DB['shop'])[]).every(k => k === 'labelCode' || k === 'autoBackupHours' || k === 'sections' || s[k] === cur[k])
     if (prefsOnly) return run('setShopPrefs', { labelCode: s.labelCode, autoBackupHours: s.autoBackupHours })
     return run('saveShop', { shop: s })
   },
@@ -345,6 +358,14 @@ export const api = {
     replay(); await setMany({ 'L:base': base, 'L:queue': [] }); emit()
   },
   snapshot: () => db,
+  /** empty shop (no demo products, bills or customers) with one owner. Single-computer mode only. */
+  startFresh(ownerPin: string) {
+    if (mode === 'server') { say('Start fresh is only for a single computer. The central database starts empty by itself.'); return }
+    if (!/^\d{4,8}$/.test(ownerPin)) { say('The owner PIN must be 4 to 8 digits.'); return }
+    base = blankDB(base.shop.name || 'Narayana Textiles', 'Owner', ownerPin); base.drafts = []; queue = []; drafts = []; me = null
+    try { sessionStorage.removeItem('narayana-crm-session') } catch { /* */ }
+    replay(); void setMany({ 'L:base': base, 'L:queue': [], 'L:drafts': [], 'L:me': null }); emit()
+  },
   resetDemo() {
     if (mode === 'server') { say('Reset to demo data is only for a single computer. Restore a backup on the central database instead.'); return }
     base = buildSeed(); base.drafts = []; queue = []; drafts = []

@@ -27,7 +27,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms))
   const billsOn = async p => (await serverState(p)).filter(r => r.c === 'bills').map(r => r.d)
   const sell = async (p, code) => {
     await p.getByRole('link', { name: 'Billing' }).click(); const s = p.getByLabel('Scan or search item'); await s.fill(code); await s.press('Enter')
-    await p.getByRole('button', { name: /^Pay$/ }).click(); await p.getByRole('button', { name: 'All CASH' }).click(); await p.getByRole('button', { name: /Save & print bill/ }).click(); await p.waitForSelector('text=TAX INVOICE')
+    await p.getByRole('button', { name: /^Pay$/ }).click(); await p.getByRole('button', { name: 'All CASH' }).click(); await p.getByRole('button', { name: /Save & print bill/ }).click(); await p.waitForSelector('.print-area .receipt')
     return p.url().split('/bills/')[1]
   }
 

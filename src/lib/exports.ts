@@ -57,10 +57,8 @@ export const exportsFor = {
 
 export function billPDF(db: DB, b: import('./types').Bill) {
   const c = db.customers.find(x => x.id === b.customerId)
-  const rate = new Map<number, { t: number; g: number }>(); b.lines.forEach(l => { const m = rate.get(l.gstRate) || { t: 0, g: 0 }; m.t += l.taxable; m.g += l.tax; rate.set(l.gstRate, m) })
-  toPDF(db, `bill-${b.no}.pdf`, `Tax invoice ${b.no}`, `${dt(b.at)}${c ? ` · ${c.name} (${c.mobile})` : ''}`, [
-    { rows: [['#', 'Item', 'HSN', 'Qty', 'Rate', 'Discount', 'GST %', 'Taxable', 'Amount'], ...b.lines.map((l, i) => [i + 1, `${l.productName} ${l.variantLabel}`, l.hsn, l.unit === 'm' ? `${l.qty} m` : l.qty, l.mrp, l.discount, l.gstRate, l.taxable, l.net])], foot: ['', 'Total', '', '', '', b.discount, '', b.taxable, b.total] },
-    { heading: 'GST summary', rows: [['GST %', 'Taxable', 'CGST', 'SGST'], ...[...rate.entries()].map(([r, m]) => [r, r2(m.t), r2(m.g / 2), r2(m.g / 2)])] },
+  toPDF(db, `bill-${b.no}.pdf`, `Bill ${b.no}`, `${dt(b.at)}${c ? ` · ${c.name} (${c.mobile})` : ''}`, [
+    { rows: [['#', 'Item', 'Qty', 'Rate', 'Discount', 'Amount'], ...b.lines.map((l, i) => [i + 1, `${l.productName} ${l.variantLabel}`, l.unit === 'm' ? `${l.qty} m` : l.qty, l.mrp, l.discount, l.net])], foot: ['', 'Total', '', '', b.discount, b.total] },
     { heading: 'Payment', rows: [['Mode', 'Amount'], ...b.payments.map(p => [p.mode.toUpperCase() + (p.ref ? ' ' + p.ref : ''), p.amount])], foot: ['Bill total', b.total] },
   ])
 }

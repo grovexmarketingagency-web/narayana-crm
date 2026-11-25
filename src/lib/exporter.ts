@@ -19,7 +19,7 @@ export function toPDF(db: DB, file: string, title: string, sub: string, sections
   const w = doc.internal.pageSize.getWidth()
   doc.setFillColor(128, 27, 58); doc.rect(0, 0, w, 56, 'F')
   doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text(db.shop.name, 36, 26)
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(`${db.shop.address}  ·  GSTIN ${db.shop.gstin}`, 36, 42)
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.text(db.shop.address, 36, 42)
   doc.setTextColor(30, 20, 20); doc.setFontSize(13); doc.setFont('helvetica', 'bold'); doc.text(title, 36, 82)
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(110, 96, 88); doc.text(sub, 36, 97)
   let y = 110

@@ -46,7 +46,7 @@ Demo PINs (demo data only): Owner 1234, Manager 2222, Cashier 1111, Accountant 0
 - `src/lib/exports.ts` + `src/lib/xlsx.ts` Excel/PDF. `src/lib/backup.ts` scheduled backups on a single counter.
 - `src/pages/*` one file per screen. `tests/` automated tests. `e2e/` browser tests. `replica/` planning notes.
 
-See SETUP.md to install in the shop and MAINTENANCE.md to keep it healthy.
+See SETUP.md to install in the shop, HOSTINGER.md to run it on Hostinger, and MAINTENANCE.md to keep it healthy.
 
 ```bash
 python3 scripts/artifact.py dist-single/index.html preview.html   # page body for the online preview
